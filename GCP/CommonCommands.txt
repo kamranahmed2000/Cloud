@@ -1,0 +1,9 @@
+#Command to list the available VPC subnets (sorted by VPC network):
+gcloud compute networks subnets list --sort-by=NETWORK
+
+#Command to list all the firewall rules (sorted by VPC network):
+gcloud compute firewall-rules list --sort-by=NETWORK
+
+#Command to create the privatenet-us-vm instance:
+gcloud compute instances create privatenet-us-vm --zone= --machine-type=e2-micro --subnet=privatesubnet-us
+
