@@ -1,3 +1,9 @@
+#list the active account name
+gcloud auth list
+
+#List the project ID 
+gcloud config list project
+
 #Command to list the available VPC subnets (sorted by VPC network):
 gcloud compute networks subnets list --sort-by=NETWORK
 
@@ -6,4 +12,13 @@ gcloud compute firewall-rules list --sort-by=NETWORK
 
 #Command to create the privatenet-us-vm instance:
 gcloud compute instances create privatenet-us-vm --zone= --machine-type=e2-micro --subnet=privatesubnet-us
+
+#Command to list all the VM instances (sorted by zone):
+gcloud compute instances list --sort-by=ZONE
+
+#The sudo ifconfig command lists a Linux VM's network interfaces along with the internal IP addresses for each interface.
+sudo ifconfig
+
+#To list the routes for vm-appliance instance.
+ip route
 
