@@ -2,6 +2,13 @@
 #Kubernetes - GKE
 A cluster consists of a Kubernetes master API server hosted by Google and a set of worker nodes. 
 The worker nodes are Compute Engine virtual machines.
+Google Kubernetes Engine (GKE) clusters are powered by the Kubernetes open source cluster management system. 
+Kubernetes provides the mechanisms through which you interact with your container cluster. 
+You use Kubernetes commands and resources to deploy and manage your applications, perform administrative tasks, set policies, 
+and monitor the health of your deployed workloads.
+
+
+----------------------------------------------
 
 #Create a cluster with two n1-standard-1 nodes.
 This command creates a GKE cluster named hello-world with 2 nodes, each using the e2-medium machine type, in the specified Google Cloud zone.
@@ -9,6 +16,12 @@ gcloud container clusters create hello-world \
                 --num-nodes 2 \
                 --machine-type e2-medium \
                 --zone "ZONE"
+----------------------------------------------
+Get authentication credentials for the cluster
+After creating your cluster, you need authentication credentials to interact with it.
+Authenticate with the cluster:
+gcloud container clusters get-credentials lab-cluster
+
 ----------------------------------------------
 Create your pod
 A Kubernetes pod is a group of containers tied together for administration and networking purposes. 
@@ -28,6 +41,9 @@ kubectl get pods
 #kubectl commands
 kubectl cluster-info
 kubectl config view
+
+kubectl config current-context
+#This command will display the name of the current context, which includes information about the cluster, user, and namespace being used by kubectl. The cluster name mentioned in the context is where the deployment will be created.
 
 And for troubleshooting :
 kubectl get events
@@ -50,12 +66,53 @@ kubectl get deployment
 
 List all the pods
 kubectl get pods
+
+#After the deployment is created, you can use the following command to get information about the pods created by the deployment, 
+including the node on which each pod is scheduled:
+kubectl get pods -o wide
+
 ----------------------------------------------
 Kubernetes will smoothly update your replication controller to the new version of the application. 
 In order to change the image label for your running container, 
 you will edit the existing hello-node deployment and change the image from gcr.io/PROJECT_ID/hello-node:v1 to gcr.io/PROJECT_ID/hello-node:v2.
 
 kubectl edit deployment hello-node
+----------------------------------------------
+To create a Kubernetes Service, which is a Kubernetes resource that lets you expose your application to external traffic, run the following kubectl expose command:
+kubectl expose deployment hello-server --type=LoadBalancer --port 8080
+In this command:
+--port specifies the port that the container exposes.
+type="LoadBalancer" creates a Compute Engine load balancer for your container.
+----------------------------------------------
+kubectl get service
+----------------------------------------------
+Deleting the cluster
+gcloud container clusters delete lab-cluster
+
+----------------------------------------------
+Deleting the deployment
+kubectl delete deployment <deployment-name>
+----------------------------------------------
+gcloud container clusters create bootcamp \
+  --machine-type e2-small \
+  --num-nodes 3 \
+  --scopes "https://www.googleapis.com/auth/projecthosting,storage-rw"
+This command creates a GKE cluster named bootcamp with nodes using the e2-small machine type, consisting of 3 nodes, and with specific IAM scopes assigned to the nodes.
+
+--scopes "https://www.googleapis.com/auth/projecthosting,storage-rw": This option specifies the IAM scopes for the nodes in the GKE cluster. 
+IAM scopes control the permissions available to the nodes. 
+In this case, the nodes will have the IAM scopes to access Google Cloud Source Repositories (https://www.googleapis.com/auth/projecthosting) 
+and read/write access to Google Cloud Storage (storage-rw).
+----------------------------------------------
+kubectl explain deployment
+#The explain command in kubectl can tell us about the deployment object:
+
+kubectl explain deployment --recursive
+You can also see all of the fields using the --recursive option:
+
+kubectl explain deployment.metadata.name
+The command will provide detailed information about the name field within the metadata section of a Kubernetes Deployment resource. 
+This typically includes information about the field's data type, format, usage, and any constraints or requirements associated with it.
 
 
-
+----------------------------------------------

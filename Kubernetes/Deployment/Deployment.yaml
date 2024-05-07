@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-server
+  template:
+    metadata:
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - name: hello-server
+        image: gcr.io/google-samples/hello-app:1.0
+      nodeSelector:
+        # Select all nodes
+        any: "true"
+
+--------------
+To ensure that pods from a deployment are distributed across all nodes in the cluster, you can set the appropriate pod scheduling constraints. One way to achieve this is by using a node selector that selects all nodes in the cluster.
+Here's an example of how you can create a deployment with a node selector that targets all nodes:
+
+In this example:
+
+The nodeSelector field specifies a node selector that selects all nodes in the cluster. It uses the label any with a value of "true".
+The replicas field specifies the desired number of pod replicas, which can be adjusted as needed.
+Apply this deployment configuration using kubectl apply -f deployment.yaml, where deployment.yaml is the filename containing the above YAML manifest.
+
+Keep in mind that while using a node selector like this will attempt to schedule pods on all nodes, Kubernetes scheduler will still consider other factors such as resource availability and pod affinity when scheduling pods. Therefore, it may not always result in exactly one pod per node, especially if there are resource constraints or other scheduling considerations.
+
+
+
+
+
+
