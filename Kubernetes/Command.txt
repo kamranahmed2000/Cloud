@@ -16,12 +16,16 @@ gcloud container clusters create hello-world \
                 --num-nodes 2 \
                 --machine-type e2-medium \
                 --zone "ZONE"
+
+#Disable Horizontal Pod Autoscaling
+gcloud container clusters update <cluster-name> --update-addons=HorizontalPodAutoscaling=DISABLED
 ----------------------------------------------
 Get authentication credentials for the cluster
 After creating your cluster, you need authentication credentials to interact with it.
 Authenticate with the cluster:
 gcloud container clusters get-credentials lab-cluster
-
+(or)
+gcloud container clusters get-credentials hello-demo-cluster --zone us-east4-c
 ----------------------------------------------
 Create your pod
 A Kubernetes pod is a group of containers tied together for administration and networking purposes. 
@@ -114,5 +118,261 @@ kubectl explain deployment.metadata.name
 The command will provide detailed information about the name field within the metadata section of a Kubernetes Deployment resource. 
 This typically includes information about the field's data type, format, usage, and any constraints or requirements associated with it.
 
+
+kubectl scale deployment hello --replicas=5
+
+kubectl get pods | grep hello- | wc -l
+
+#To update your deployment, run the following command
+kubectl edit deployment hello
+
+#See the new ReplicaSet that Kubernetes creates
+kubectl get replicaset
+
+#You can also see a new entry in the rollout history:
+kubectl rollout history deployment/hello
+
+#Run the following to pause the rollout:
+kubectl rollout pause deployment/hello
+
+#Verify the current state of the rollout:
+kubectl rollout status deployment/hello
+
+#You can also verify this on the Pods directly:
+kubectl get pods -o jsonpath --template='{range .items[*]}{.metadata.name}{"\t"}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+----------------------------------------------
+Resume a rolling update
+
+The rollout is paused which means that some pods are at the new version and some pods are at the older version.
+
+#Continue the rollout using the resume command:
+kubectl rollout resume deployment/hello
+
+#When the rollout is complete, you should see the following when running the status command:
+kubectl rollout status deployment/hello
+----------------------------------------------
+Roll back an update
+Assume that a bug was detected in your new version. 
+Since the new version is presumed to have problems, any users connected to the new Pods will experience those issues.
+
+You will want to roll back to the previous version so you can investigate and then release a version that is fixed properly.
+
+#Use the rollout command to roll back to the previous version:
+kubectl rollout undo deployment/hello
+
+#Verify the roll back in the history:
+kubectl rollout history deployment/hello
+
+#Finally, verify that all the Pods have rolled back to their previous versions:
+kubectl get pods -o jsonpath --template='{range .items[*]}{.metadata.name}{"\t"}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+----------------------------------------------
+Create a canary deployment
+A canary deployment consists of a separate deployment with your new version and a service that targets both your normal, stable deployment as well as your canary deployment.
+
+#First, create a new canary deployment for the new version:
+cat deployments/hello-canary.yaml
+----------------------------------------------
+Canary deployments in production - session affinity
+
+In this lab, each request sent to the Nginx service had a chance to be served by the canary deployment. 
+But what if you wanted to ensure that a user didn't get served by the canary deployment? 
+A use case could be that the UI for an application changed, and you don't want to confuse the user. 
+In a case like this, you want the user to "stick" to one deployment or the other.
+
+You can do this by creating a service with session affinity. 
+This way the same user will always be served from the same version. 
+In the example below, the service is the same as before, but a new sessionAffinity field has been added, and set to ClientIP. 
+All clients with the same IP address will have their requests sent to the same version of the hello application.
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: "hello"
+spec:
+  sessionAffinity: ClientIP
+  selector:
+    app: "hello"
+  ports:
+    - protocol: "TCP"
+      port: 80
+      targetPort: 80
+Due to it being difficult to set up an environment to test this, you don't need to here, but you may want to use sessionAffinity for canary deployments in production.
+----------------------------------------------
+Blue-green deployments
+Kubernetes achieves this by creating two separate deployments; one for the old "blue" version and one for the new "green" version. 
+Use your existing hello deployment for the "blue" version. 
+The deployments will be accessed via a service which will act as the router. 
+Once the new "green" version is up and running, you'll switch over to using that version by updating the service.
+
+Note: A major downside of blue-green deployments is that you will need to have at least 2x the resources in your cluster necessary to host your application. 
+Make sure you have enough resources in your cluster before deploying both versions of the application at once.
+
+curl -ks https://`kubectl get svc frontend -o=jsonpath="{.status.loadBalancer.ingress[0].ip}"`/version
+----------------------------------------------
+kubectl apply -f deployment.yaml
+
+kubectl get pods -o jsonpath --template='{range .items[*]}{.metadata.name}{"\t"}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+
+#Disable kube-dns
+kubectl scal --replicas=0 deployment/kube-dns-autoscaler --namespace=kube-system
+
+#Limit kube-dns scaling
+kubectl scale --replicas=0 deployment/kube-dns-autoscaler --namespace=kube-system
+kubectl scale --replicas=1 deployment/kube-dns --namespace=kube-system
+----------------------------------------------
+#Kubernetes will return a list of API resources along with their associated group, version, and whether they are namespaced or not. 
+#The output will include resources such as Pods, Deployments, Services, ConfigMaps, Secrets, and more, which are all scoped to a specific namespace within the cluster.
+kubectl api-resources --namespaced=true
+
+#This will output all services in the kube-system namespace.
+kubectl get services --namespace=kube-system
+----------------------------------------------
+Creating new namespaces
+
+#Create 2 namespaces for team-a and team-b:
+kubectl create namespace team-a && \
+kubectl create namespace team-b
+
+#run the following to deploy a pod in the team-a namespace and in the team-b namespace using the same name:
+kubectl run app-server --image=centos --namespace=team-a -- sleep infinity && \
+kubectl run app-server --image=centos --namespace=team-b -- sleep infinity
+#The above command will create a Pod named app-server running the CentOS image in the team-a namespace, and the Pod will continue running indefinitely due to the sleep infinity command.
+
+#to see there are 2 pods named app-server, one for each team namespace:
+kubectl get pods -A
+
+#kubectl describe to see additional details for each of the newly created pods by specifying the namespace with the --namespace tag:
+kubectl describe pod app-server --namespace=team-a
+
+#To work exclusively with resources in one namespace, you can set it once in the kubectl context instead of using the --namespace flag for every command:
+kubectl config set-context --current --namespace=team-a
+
+#After this, any subsequent commands will be run against the indicated namespace without specifying the --namespace flag:
+kubectl describe pod app-server
+----------------------------------------------
+https://www.cloudskillsboost.google/course_templates/655/labs/464669
+Resource quotas
+#the following will set a limit to the number of pods allowed in the namespace team-a to 2, and the number of loadbalancers to 1:
+
+kubectl create quota test-quota \
+--hard=count/pods=2,count/services.loadbalancers=1 --namespace=team-a
+
+#Create a second pod in the namespace team-a:
+kubectl run app-server-2 --image=centos --namespace=team-a -- sleep infinity
+
+#Now try to create a third pod:
+kubectl run app-server-3 --image=centos --namespace=team-a -- sleep infinity
+
+#You should receive the following error:
+Error from server (Forbidden): pods "app-server-3" is forbidden: exceeded quota: test-quota, requested: count/pods=1, used: count/pods=2, limited: count/pods=2
+
+#You can check details about your resource quota using kubectl describe
+kubectl describe quota test-quota --namespace=team-a
+
+#Update test-quota to have a limit of 6 pods by running:
+export KUBE_EDITOR="nano"
+kubectl edit quota test-quota --namespace=team-a
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  creationTimestamp: "2020-10-21T14:12:07Z"
+  name: test-quota
+  namespace: team-a
+  resourceVersion: "5325601"
+  selfLink: /api/v1/namespaces/team-a/resourcequotas/test-quota
+  uid: a4766300-29c4-4433-ba24-ad10ebda3e9c
+spec:
+  hard:
+    count/pods: "6"
+    count/services.loadbalancers: "1"
+status:
+  hard:
+    count/pods: "5"
+    count/services.loadbalancers: "1"
+  used:
+    count/pods: "2"
+
+#kubectl describe quota test-quota --namespace=team-a
+----------------------------------------------
+cpu-mem-quota.yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: cpu-mem-quota
+  namespace: team-a
+spec:
+  hard:
+    limits.cpu: "4"
+    limits.memory: "12Gi"
+    requests.cpu: "2"
+    requests.memory: "8Gi"
+
+#Once this pod has been created, run the following to see its CPU and memory requests and limits reflected in the quota
+kubectl describe quota cpu-mem-quota --namespace=team-a
+----------------------------------------------
+GKE usage metering
+
+export ZONE=placeholder
+gcloud container clusters \
+  update multi-tenant-cluster --zone ${ZONE} \
+  --resource-usage-bigquery-dataset cluster_dataset
+----------------------------------------------
+you can migrate pods to the new node pool by following these steps:
+
+1. Cordon the existing node pool: This operation marks the nodes in the existing node pool (node) as unschedulable. Kubernetes stops scheduling new Pods to these nodes once you mark them as unschedulable.
+2. Drain the existing node pool: This operation evicts the workloads running on the nodes of the existing node pool (node) gracefully.
+
+for node in $(kubectl get nodes -l cloud.google.com/gke-nodepool=my-node-pool -o=name); do
+  kubectl cordon "$node";
+done
+
+for node in $(kubectl get nodes -l cloud.google.com/gke-nodepool=my-node-pool -o=name); do
+  kubectl drain --force --ignore-daemonsets --delete-local-data --grace-period=10 "$node";
+done
+
+
+----------------------------------------------
+#Increase your node pool to handle your new request
+gcloud container clusters resize hello-demo-cluster --node-pool my-node-pool \
+    --num-nodes 3 --zone us-east4-c
+
+kubectl get pod pod-1 pod-2 --output wide
+----------------------------------------------
+cat << EOF > pod-1.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-1
+  labels:
+    security: demo
+spec:
+  containers:
+  - name: container-1
+    image: wbitt/network-multitool
+EOF
+----------------------------------------------
+cat << EOF > pod-2.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-2
+spec:
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+          - key: security
+            operator: In
+            values:
+            - demo
+        topologyKey: "kubernetes.io/hostname"
+  containers:
+  - name: container-2
+    image: gcr.io/google-samples/node-hello:1.0
+EOF
+----------------------------------------------
+kubectl get pod pod-1 pod-2 --output wide
 
 ----------------------------------------------
