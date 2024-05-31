@@ -1,0 +1,81 @@
+#https://www.cloudskillsboost.google/course_templates/655/labs/464677
+---------------------------------------------------
+#Container-native load balancing through ingress
+#Create a three node cluster:
+gcloud container clusters create test-cluster --num-nodes=3  --enable-ip-alias
+
+
+The --enable-ip-alias flag is included in order to enable the use of alias IPs for pods which will be required for container-native load balancing through an ingress.
+
+For this lab, you'll use a simple HTTP web app that you will first deploy as a single pod.
+---------------------------------------------------
+Create a manifest for the gb-frontend pod:
+
+cat << EOF > gb_frontend_pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: gb-frontend
+  name: gb-frontend
+spec:
+    containers:
+    - name: gb-frontend
+      image: gcr.io/google-samples/gb-frontend-amd64:v5
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+      ports:
+      - containerPort: 80
+EOF
+---------------------------------------------------
+kubectl apply -f gb_frontend_pod.yaml
+---------------------------------------------------
+#The following manifest will configure a ClusterIP service that will be used to route traffic to your application pod to allow GKE to create a network endpoint group:
+cat << EOF > gb_frontend_cluster_ip.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: gb-frontend-svc
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app: gb-frontend
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+EOF
+---------------------------------------------------
+kubectl apply -f gb_frontend_cluster_ip.yaml
+---------------------------------------------------
+#create an ingress for your application
+cat << EOF > gb_frontend_ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gb-frontend-ingress
+spec:
+  defaultBackend:
+    service:
+      name: gb-frontend-svc
+      port:
+        number: 80
+EOF
+---------------------------------------------------
+kubectl apply -f gb_frontend_ingress.yaml
+---------------------------------------------------
+#To check the health status of the backend service, first retrieve the name:
+BACKEND_SERVICE=$(gcloud compute backend-services list | grep NAME | cut -d ' ' -f2)
+
+#Get the health status for the service:
+gcloud compute backend-services get-health $BACKEND_SERVICE --global
+
+#you can access the application via its external IP.
+kubectl get ingress gb-frontend-ingress
+
+#Entering the external IP in a browser window will load the application.
+---------------------------------------------------

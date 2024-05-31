@@ -1,0 +1,103 @@
+
+----------------------------------------------
+gcloud container clusters create scaling-demo --num-nodes=3 --enable-vertical-pod-autoscaling
+
+#Create a manifest for the php-apache deployment
+cat << EOF > php-apache.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-apache
+spec:
+  selector:
+    matchLabels:
+      run: php-apache
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        run: php-apache
+    spec:
+      containers:
+      - name: php-apache
+        image: k8s.gcr.io/hpa-example
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            cpu: 500m
+          requests:
+            cpu: 200m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: php-apache
+  labels:
+    run: php-apache
+spec:
+  ports:
+  - port: 80
+  selector:
+    run: php-apache
+EOF
+----------------------------------------------
+kubectl apply -f php-apache.yaml
+kubectl get deployment
+
+#Apply horizontal autoscaling to the php-apache deployment
+kubectl autoscale deployment php-apache --cpu-percent=50 --min=1 --max=10
+
+#This command will display information about the HPA, including the current and desired number of replicas and the current CPU usage.
+kubectl get hpa
+
+#Vertical Pod Autoscaling has already been enabled on the scaling-demo cluster
+gcloud container clusters describe scaling-demo | grep ^verticalPodAutoscaling -A 1
+
+#Vertical Pod Autoscaling can be enabled on an existing cluster with 
+gcloud container clusters update scaling-demo --enable-vertical-pod-autoscaling
+----------------------------------------------
+#Apply the hello-server deployment to your cluster
+kubectl create deployment hello-server --image=gcr.io/google-samples/hello-app:1.0
+
+#Ensure the deployment was successfully created
+kubectl get deployment hello-server
+
+#Assign a CPU resource request of 450m to the deployment
+kubectl set resources deployment hello-server --requests=cpu=450m
+
+#Run this command to inspect the container specifics of the hello-server pods:
+kubectl describe pod hello-server | sed -n "/Containers:$/,/Conditions:/p"
+----------------------------------------------
+#create a manifest for you Vertical Pod Autoscaler
+cat << EOF > hello-vpa.yaml
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: hello-server-vpa
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind:       Deployment
+    name:       hello-server
+  updatePolicy:
+    updateMode: "Off"
+EOF
+
+#Apply the manifest for hello-vpa:
+kubectl apply -f hello-vpa.yaml
+
+#Wait a minute, and then view the VerticalPodAutoscaler
+kubectl describe vpa hello-server-vpa
+
+#Update the manifest to set the policy to Auto and apply the configuration
+sed -i 's/Off/Auto/g' hello-vpa.yaml
+kubectl apply -f hello-vpa.yaml
+
+#Scale hello-server deployment to 2 replicas
+kubectl scale deployment hello-server --replicas=2
+
+kubectl get pods -w
+
+
+----------------------------------------------

@@ -1,0 +1,88 @@
+#https://www.cloudskillsboost.google/course_templates/655/labs/464674
+##Cluster autoscaler
+
+#Enable autoscaling for your cluster
+gcloud beta container clusters update scaling-demo --enable-autoscaling --min-nodes 1 --max-nodes 5
+
+#Switch to the optimize-utilization autoscaling profile so that the full effects of scaling can be observed:
+gcloud beta container clusters update scaling-demo \
+--autoscaling-profile optimize-utilization
+
+kubectl get deployment -n kube-system
+----------------------------------------------
+#Run these commands to create the Pod Disruption Budgets for each of your kube-system pods
+kubectl create poddisruptionbudget kube-dns-pdb --namespace=kube-system --selector k8s-app=kube-dns --max-unavailable 1
+kubectl create poddisruptionbudget prometheus-pdb --namespace=kube-system --selector k8s-app=prometheus-to-sd --max-unavailable 1
+kubectl create poddisruptionbudget kube-proxy-pdb --namespace=kube-system --selector component=kube-proxy --max-unavailable 1
+kubectl create poddisruptionbudget metrics-agent-pdb --namespace=kube-system --selector k8s-app=gke-metrics-agent --max-unavailable 1
+kubectl create poddisruptionbudget metrics-server-pdb --namespace=kube-system --selector k8s-app=metrics-server --max-unavailable 1
+kubectl create poddisruptionbudget fluentd-pdb --namespace=kube-system --selector k8s-app=fluentd-gke --max-unavailable 1
+kubectl create poddisruptionbudget backend-pdb --namespace=kube-system --selector k8s-app=glbc --max-unavailable 1
+kubectl create poddisruptionbudget kube-dns-autoscaler-pdb --namespace=kube-system --selector k8s-app=kube-dns-autoscaler --max-unavailable 1
+kubectl create poddisruptionbudget stackdriver-pdb --namespace=kube-system --selector app=stackdriver-metadata-agent --max-unavailable 1
+kubectl create poddisruptionbudget event-pdb --namespace=kube-system --selector k8s-app=event-exporter --max-unavailable 1
+----------------------------------------------
+
+#Node Auto Provisioning
+gcloud container clusters update scaling-demo \
+    --enable-autoprovisioning \
+    --min-cpu 1 \
+    --min-memory 2 \
+    --max-cpu 45 \
+    --max-memory 160
+
+ #In the command, you specify a minimum and maximum number for your CPU and memory resources. This is for the entire cluster.
+----------------------------------------------
+#Test with larger demand
+kubectl run -i --tty load-generator --rm --image=busybox --restart=Never -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://php-apache; done"
+
+kubectl get hpa
+
+kubectl get deployment php-apache
+
+----------------------------------------------
+#Pause Pods
+#Pause Pods are low priority deployments which are able to be removed and replaced by high priority deployments. 
+#This means you can create low priority pods which don't actually do anything except reserve buffer space. 
+#When the higher-priority pod needs room, the pause pods will be removed and rescheduled to another node, or a new node, and the higher-priority pod has the room it needs to be scheduled quickly.
+
+cat << EOF > pause-pod.yaml
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: overprovisioning
+value: -1
+globalDefault: false
+description: "Priority class used by overprovisioning."
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: overprovisioning
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: overprovisioning
+  template:
+    metadata:
+      labels:
+        run: overprovisioning
+    spec:
+      priorityClassName: overprovisioning
+      containers:
+      - name: reserve-resources
+        image: k8s.gcr.io/pause
+        resources:
+          requests:
+            cpu: 1
+            memory: 4Gi
+EOF
+
+kubectl apply -f pause-pod.yaml
+
+
+
+----------------------------------------------

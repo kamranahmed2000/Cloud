@@ -1,0 +1,10 @@
+#Load testing an application
+#To load test your pod, you'll use Locust, an open source load-testing framework.
+---------------------------------------------------
+#Download the Docker image files for Locust in your Cloud Shell:
+gsutil -m cp -r gs://spls/gsp769/locust-image .
+
+---------------------------------------------------
+---------------------------------------------------
+---------------------------------------------------
+---------------------------------------------------
