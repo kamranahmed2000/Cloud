@@ -4,6 +4,21 @@
 #Download the Docker image files for Locust in your Cloud Shell:
 gsutil -m cp -r gs://spls/gsp769/locust-image .
 
+#Build the Docker image for Locust and store it in your project's container registry:
+gcloud builds submit \
+    --tag gcr.io/${GOOGLE_CLOUD_PROJECT}/locust-tasks:latest locust-image
+
+#Verify the Docker image is in your project's container registry
+gcloud container images list
+
+#Copy and apply the manifest will create a single-pod deployment for the main and a 5-replica deployment for the workers:
+gsutil cp gs://spls/gsp769/locust_deploy_v2.yaml .
+sed 's/${GOOGLE_CLOUD_PROJECT}/'$GOOGLE_CLOUD_PROJECT'/g' locust_deploy_v2.yaml | kubectl apply -f -
+
+#To access the Locust UI, retrieve the external IP address of its corresponding LoadBalancer service:
+kubectl get service locust-main
+
+#In a new browser window, navigate to [EXTERNAL_IP_ADDRESS]:8089 to open the Locust web page:
 ---------------------------------------------------
 ---------------------------------------------------
 ---------------------------------------------------
