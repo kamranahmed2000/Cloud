@@ -1,0 +1,104 @@
+#Readiness and liveness probes
+#Setting up a liveness probe
+#If configured in the Kubernetes pod or deployment spec, a liveness probe will continuously run to detect whether a container requires a restart and trigger that restart. 
+#They are helpful for automatically restarting deadlocked applications that may still be in a running state. 
+#For example, a kubernetes-managed load balancer (such as a service) would only send traffic to a pod backend if all of its containers pass a readiness probe.
+---------------------------------------------------
+#To demonstrate a liveness probe, the following will generate a manifest for a pod that has a liveness probe based on the execution of the cat command on a file created on creation:
+cat << EOF > liveness-demo.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    demo: liveness-probe
+  name: liveness-demo-pod
+spec:
+  containers:
+  - name: liveness-demo-pod
+    image: centos
+    args:
+    - /bin/sh
+    - -c
+    - touch /tmp/alive; sleep infinity
+    livenessProbe:
+      exec:
+        command:
+        - cat
+        - /tmp/alive
+      initialDelaySeconds: 5
+      periodSeconds: 10
+EOF
+---------------------------------------------------
+kubectl apply -f liveness-demo.yaml
+---------------------------------------------------
+#In this example the liveness probe is essentially checking if the file /tmp/alive exists on the container's file system.
+#You can verify the health of the pod's container by checking the pod's events:
+
+kubectl describe pod liveness-demo-pod
+
+#Manually delete the file being used by the liveness probe
+kubectl exec liveness-demo-pod -- rm /tmp/alive
+
+#Once again, check the pod's events:
+kubectl describe pod liveness-demo-pod
+
+---------------------------------------------------
+#Setting up a readiness probe
+#Although a pod could successfully start and be considered healthy by a liveness probe, it's likely that it may not be ready to receive traffic right away. This is common for deployments that serve as a backend to a service such as a load balancer. A readiness probe is used to determine when a pod and its containers are ready to begin receiving traffic.
+
+#To demonstrate this, create a manifest to create a single pod that will serve as a test web server along with a load balancer:
+cat << EOF > readiness-demo.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    demo: readiness-probe
+  name: readiness-demo-pod
+spec:
+  containers:
+  - name: readiness-demo-pod
+    image: nginx
+    ports:
+    - containerPort: 80
+    readinessProbe:
+      exec:
+        command:
+        - cat
+        - /tmp/healthz
+      initialDelaySeconds: 5
+      periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: readiness-demo-svc
+  labels:
+    demo: readiness-probe
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  selector:
+    demo: readiness-probe
+EOF
+---------------------------------------------------
+kubectl apply -f readiness-demo.yaml
+
+#Retrieve the external IP address assigned to your load balancer (it may take a minute after the previous command for an address to be assigned):
+kubectl get service readiness-demo-svc
+
+#Enter the IP address in a browser window and you'll notice that you'll get an error message signifying that the site cannot be reached.
+#Check the pod's events
+kubectl describe pod readiness-demo-pod
+
+
+#Use the following command to generate the file that the readiness probe is checking for:
+kubectl exec readiness-demo-pod -- touch /tmp/healthz
+
+#The Conditions section of the pod description should now show True as the value for Ready.
+kubectl describe pod readiness-demo-pod | grep ^Conditions -A 5
+
+---------------------------------------------------
+---------------------------------------------------

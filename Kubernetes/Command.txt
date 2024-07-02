@@ -376,3 +376,7 @@ EOF
 kubectl get pod pod-1 pod-2 --output wide
 
 ----------------------------------------------
+kubectl config set-context --current --namespace dev
+#Deploy the application to the dev namespace. Switch the current namespace from default to dev:
+
+----------------------------------------------
